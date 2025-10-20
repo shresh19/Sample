@@ -1,0 +1,442 @@
+1. App.js
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import PayrollPayments from './pages/PayrollPayments/PayrollPayments';
+import './index.css';
+
+function App() {
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={<PayrollPayments />} />
+        {/* Placeholder pages for your other links */}
+        <Route path="/transfers" element={<div>Transfers Page</div>} />
+        <Route path="/history" element={<div>History Page</div>} />
+        <Route path="/drafts" element={<div>Drafts Page</div>} /> 
+      </Routes>
+    </Router>
+  );
+}
+
+export default App;
+
+
+2. InstructionDetails.js
+
+import React from 'react';
+import './InstructionDetails.css';
+
+const InstructionDetails = () => {
+  const today = new Date().toISOString().split('T')[0];
+
+  return (
+    <div className="instruction-card">
+      <h3 className="card-title">Instruction Details</h3>
+      <div className="instruction-form">
+        
+        {/* --- Change 1: New "Batch" field added first --- */}
+        <div className="form-group">
+          <label htmlFor="batch">Batch</label>
+          <select id="batch" name="batch">
+            <option value="">Select Batch</option>
+            <option value="1">Batch 1</option>
+            <option value="2">Batch 2</option>
+            <option value="3">Batch 3</option>
+          </select>
+        </div>
+
+        {/* --- Change 1: Fields re-ordered --- */}
+        <div className="form-group">
+          <label htmlFor="debitAccount">Debit Account</label>
+          <select id="debitAccount" name="debitAccount">
+            <option value="">Select Debit Account</option>
+            <option value="account1">Account 1 - ****1234</option>
+            <option value="account2">Account 2 - ****5678</option>
+          </select>
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="paymentCurrency">Payment Currency</label>
+          <select id="paymentCurrency" name="paymentCurrency">
+            <option value="">Select Currency</option>
+            <option value="USD">USD - US Dollar</option>
+            <option value="EUR">EUR - Euro</option>
+            <option value="INR">INR - Indian Rupee</option>
+          </select>
+        </div>
+        
+        <div className="form-group">
+          <label htmlFor="payrollType">Payroll Type</label>
+          <select id="payrollType" name="payrollType">
+            <option value="">Select Payroll Type</option>
+            <option value="monthly">Monthly Salary</option>
+            <option value="bonus">Bonus</option>
+          </select>
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="valueDate">Date</label>
+          <input type="date" id="valueDate" name="valueDate" defaultValue={today} />
+        </div>
+
+      </div>
+    </div>
+  );
+};
+
+export default InstructionDetails;
+
+3. PaymentDetails.js
+
+import React, { useState, useEffect, useRef } from 'react';
+import { FiPlus, FiTrash2, FiUpload } from 'react-icons/fi'; // Added FiUpload
+import * as XLSX from 'xlsx'; // Import xlsx library
+import './PaymentDetails.css';
+
+// --- Change 2: Updated createNewRow function for new columns ---
+const createNewRow = (id) => ({
+  id,
+  batchId: '',
+  payeeName: '',
+  beneficiaryDetails: '', // Was payeeDetails
+  yourReference: '',
+  paymentReference: '',
+  amount: '',
+  notes: '', // Was Notes to Payee, removed Additional Notes
+});
+
+const PaymentDetails = () => {
+  const [rows, setRows] = useState([createNewRow(1)]);
+  const [totalAmount, setTotalAmount] = useState(0);
+
+  // --- Change 3: Ref for hidden file input ---
+  const fileInputRef = useRef(null);
+
+  // Update total amount whenever rows change
+  useEffect(() => {
+    const total = rows.reduce((sum, row) => sum + (parseFloat(row.amount) || 0), 0);
+    setTotalAmount(total);
+  }, [rows]);
+
+  const handleInputChange = (id, event) => {
+    const { name, value } = event.target;
+    const newRows = rows.map(row => (row.id === id ? { ...row, [name]: value } : row));
+    setRows(newRows);
+  };
+
+  const addRow = () => {
+    const newId = rows.length > 0 ? Math.max(...rows.map(r => r.id)) + 1 : 1;
+    setRows([...rows, createNewRow(newId)]);
+  };
+
+  const deleteRow = (id) => {
+    if (rows.length > 1) {
+      setRows(rows.filter(row => row.id !== id));
+    }
+  };
+
+  // --- Change 3: Function to trigger hidden file input ---
+  const handleImportClick = () => {
+    fileInputRef.current.click();
+  };
+
+  // --- Change 3: Function to handle file import and parsing ---
+  const handleFileImport = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const data = event.target.result;
+      const workbook = XLSX.read(data, { type: 'binary' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      
+      // Assumes Excel columns match these names:
+      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+      const maxId = rows.length > 0 ? Math.max(...rows.map(r => r.id)) : 0;
+
+      const newRowsFromExcel = jsonData.map((row, index) => ({
+        id: maxId + index + 1,
+        batchId: row['Batch ID'] || '',
+        payeeName: row['Payee Name'] || '',
+        beneficiaryDetails: row['Beneficiary Details'] || '',
+        yourReference: row['Your Reference'] || '',
+        paymentReference: row['Payment Reference'] || '',
+        amount: row['Amount'] || 0,
+        notes: row['Notes to Payee'] || '',
+      }));
+
+      // Logic to append new rows, or replace the initial empty row
+      setRows(prevRows => {
+        const isInitialEmptyRow = prevRows.length === 1 && !prevRows[0].payeeName && !prevRows[0].amount;
+        if (isInitialEmptyRow) {
+          return newRowsFromExcel;
+        }
+        return [...prevRows, ...newRowsFromExcel];
+      });
+
+      // Clear the file input value to allow re-uploading the same file
+      e.target.value = null;
+    };
+    reader.readAsBinaryString(file);
+  };
+
+
+  return (
+    <div className="payment-details-card">
+       <div className="payment-details-header">
+         <h3 className="card-title">Payment Details</h3>
+         <div className="payment-details-actions">
+           {/* --- Change 3: "Import a File" button added --- */}
+           <button onClick={handleImportClick} className="btn-import">
+              <FiUpload /> Import a File
+           </button>
+           {/* --- Change 3: Hidden file input --- */}
+           <input
+              type="file"
+              ref={fileInputRef}
+              style={{ display: 'none' }}
+              accept=".xlsx, .xls, .csv"
+              onChange={handleFileImport}
+           />
+           <button onClick={addRow} className="add-row-button-header">
+              <FiPlus /> Add Another Line
+           </button>
+         </div>
+       </div>
+      <div className="payment-table-container">
+        <table className="payment-table">
+          <thead>
+            {/* --- Change 2: Table headers updated --- */}
+            <tr>
+              <th>Batch ID</th>
+              <th>Payee Name</th>
+              <th>Beneficiary Details</th>
+              <th>Your Reference</th>
+              <th>Payment Reference</th>
+              <th>Amount</th>
+              <th>Notes to Payee</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => (
+              <tr key={row.id}>
+                {/* --- Change 2: Table rows updated --- */}
+                <td><input type="text" name="batchId" value={row.batchId} placeholder="Batch ID" onChange={(e) => handleInputChange(row.id, e)} /></td>
+                <td><input type="text" name="payeeName" value={row.payeeName} placeholder="Pay Recipient" onChange={(e) => handleInputChange(row.id, e)} /></td>
+                {/* Changed to input to support file import */}
+                <td><input type="text" name="beneficiaryDetails" value={row.beneficiaryDetails} placeholder="Beneficiary" onChange={(e) => handleInputChange(row.id, e)} /></td>
+                <td><input type="text" name="yourReference" value={row.yourReference} placeholder="Your Reference" onChange={(e) => handleInputChange(row.id, e)} /></td>
+                <td><input type="text" name="paymentReference" value={row.paymentReference} placeholder="Pay Recipient" onChange={(e) => handleInputChange(row.id, e)} /></td>
+                <td><input type="number" name="amount" value={row.amount} placeholder="0.00" className="amount-input" onChange={(e) => handleInputChange(row.id, e)} /></td>
+                <td><input type="text" name="notes" value={row.notes} placeholder="Enter the value" onChange={(e) => handleInputChange(row.id, e)} /></td>
+                <td>
+                  <button onClick={() => deleteRow(row.id)} className="delete-row-button" disabled={rows.length === 1 && !row.payeeName && !row.amount}>
+                    <FiTrash2 />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="payment-footer">
+        <div className="total-amount">
+          <span>Total Amount</span>
+          {/* Updated currency format to match your image */}
+          <span className="total-value">{totalAmount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default PaymentDetails;
+
+4. PaymentDetails.css
+
+.payment-details-card {
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  overflow: hidden; /* Important for table responsiveness */
+}
+
+.payment-details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* --- New style to group the buttons --- */
+.payment-details-actions {
+  display: flex;
+  gap: 15px;
+}
+
+/* --- New style for the import button --- */
+.btn-import {
+  background-color: #fff;
+  color: var(--sc-blue);
+  border: 1px solid var(--sc-blue);
+  padding: 8px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+}
+
+.btn-import:hover {
+  background-color: var(--sc-blue);
+  color: #fff;
+}
+
+
+.add-row-button-header {
+    background-color: #fff;
+    color: var(--sc-blue);
+    border: 1px solid var(--sc-blue);
+    padding: 8px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+}
+
+.add-row-button-header:hover {
+    background-color: var(--sc-blue);
+    color: #fff;
+}
+
+
+.payment-table-container {
+  width: 100%;
+  overflow-x: auto; /* Allows table to scroll horizontally on small screens */
+}
+
+.payment-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 1200px; /* Ensures layout doesn't break on smaller viewports */
+}
+
+.payment-table th {
+  background-color: var(--background-light);
+  padding: 12px 10px;
+  text-align: left;
+  font-size: 0.85em;
+  font-weight: 700;
+  color: #5e6c84;
+}
+
+.payment-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.payment-table input,
+.payment-table select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background-color: transparent;
+  transition: all 0.2s;
+}
+
+.payment-table input:focus,
+.payment-table select:focus {
+  outline: none;
+  background-color: #fff;
+  border-color: var(--sc-blue);
+}
+
+.payment-table .amount-input {
+  text-align: right;
+}
+
+.delete-row-button {
+  background: none;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  font-size: 1.2em;
+  padding: 5px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.delete-row-button:hover:not(:disabled) {
+  background-color: #ffebee;
+  color: var(--danger-red);
+}
+
+.delete-row-button:disabled {
+  color: #ccc;
+  cursor: not-allowed;
+}
+
+.payment-footer {
+  padding: 20px;
+  background-color: var(--background-light);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.total-amount {
+  display: flex;
+  align-items: baseline;
+  gap: 20px;
+  font-weight: 700;
+}
+
+.total-value {
+  font-size: 1.5em;
+  color: var(--sc-green);
+}
+
+5. PayrollPayments.js
+
+import React from 'react';
+import Header from '../../components/Header/Header';
+import TopNav from '../../components/TopNav/TopNav';
+import InstructionDetails from '../../components/InstructionDetails/InstructionDetails';
+import PaymentDetails from '../../components/PaymentDetails/PaymentDetails';
+import './PayrollPayments.css';
+
+const PayrollPayments = () => {
+  return (
+    <div className="page-container">
+      <Header />
+      <TopNav />
+      <main className="main-content">
+        <div className="page-header">
+          <h1>Payroll Payments</h1>
+          <div className="page-actions">
+            {/* Updated button text to match your image */}
+            <button className="btn btn-secondary">Save as Draft</button>
+            <button className="btn btn-primary">Preview & Submit</button>
+          </div>
+        </div>
+        <InstructionDetails />
+        <PaymentDetails />
+      </main>
+    </div>
+  );
+};
+
+export default PayrollPayments;
