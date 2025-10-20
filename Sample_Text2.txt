@@ -1,0 +1,613 @@
+1. App.js
+
+import React, { useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
+import PayrollPayments from './pages/PayrollPayments/PayrollPayments';
+import DraftsPage from './pages/DraftsPage/DraftsPage';
+import PreviewPage from './pages/PreviewPage/PreviewPage';
+import './index.css';
+
+// A wrapper component to allow DraftsPage to use the navigate hook
+const DraftsPageWrapper = ({ drafts, handleEditDraft }) => {
+  const navigate = useNavigate();
+  return <DraftsPage drafts={drafts} handleEditDraft={handleEditDraft} navigate={navigate} />;
+};
+
+
+function App() {
+  const [drafts, setDrafts] = useState([]);
+  const [currentPayment, setCurrentPayment] = useState(null);
+  const [draftToEdit, setDraftToEdit] = useState(null); // State to hold the draft being edited
+
+  // Function to save a new draft or update an existing one
+  const saveOrUpdateDraft = (draftData) => {
+    // If the draft has an ID, it's an update
+    if (draftData.id) {
+      setDrafts(prevDrafts => prevDrafts.map(d => d.id === draftData.id ? { ...draftData, savedAt: new Date().toLocaleString() } : d));
+    } else { // Otherwise, it's a new draft
+      const newDraft = {
+        ...draftData,
+        id: `draft_${Date.now()}`,
+        savedAt: new Date().toLocaleString(),
+      };
+      setDrafts(prevDrafts => [...prevDrafts, newDraft]);
+    }
+  };
+  
+  // Sets the draft to be edited and will trigger navigation
+  const handleEditDraft = (draftId) => {
+    const draft = drafts.find(d => d.id === draftId);
+    if (draft) {
+      setDraftToEdit(draft);
+    }
+  };
+
+  const clearDraftToEdit = () => {
+    setDraftToEdit(null);
+  };
+
+
+  return (
+    <Router>
+      <Routes>
+        <Route 
+          path="/" 
+          element={
+            <PayrollPayments 
+              saveOrUpdateDraft={saveOrUpdateDraft} 
+              setCurrentPayment={setCurrentPayment}
+              draftToEdit={draftToEdit}
+              clearDraftToEdit={clearDraftToEdit}
+            />
+          } 
+        />
+        <Route 
+          path="/drafts" 
+          element={<DraftsPageWrapper drafts={drafts} handleEditDraft={handleEditDraft} />} 
+        />
+        <Route 
+          path="/preview" 
+          element={<PreviewPage paymentData={currentPayment} />} 
+        />
+        <Route path="/transfers" element={<div style={{padding: '2rem'}}>Transfers Page</div>} />
+        <Route path="/history" element={<div style={{padding: '2rem'}}>History Page</div>} />
+      </Routes>
+    </Router>
+  );
+}
+
+export default App;
+
+
+2. PayrollPayments.js
+
+
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import Header from '../../components/Header/Header';
+import TopNav from '../../components/TopNav/TopNav';
+import InstructionDetails from '../../components/InstructionDetails/InstructionDetails';
+import PaymentDetails from '../../components/PaymentDetails/PaymentDetails';
+import './PayrollPayments.css';
+
+const PayrollPayments = ({ saveOrUpdateDraft, setCurrentPayment, draftToEdit, clearDraftToEdit }) => {
+  const navigate = useNavigate();
+  
+  // State for the data in the child components
+  const [instructionDetails, setInstructionDetails] = useState({
+    batch: '', debitAccount: '', paymentCurrency: '', payrollType: '', valueDate: new Date().toISOString().split('T')[0]
+  });
+  const [paymentRows, setPaymentRows] = useState(null);
+  const [totalAmount, setTotalAmount] = useState(0);
+  const [draftId, setDraftId] = useState(null); // To track if we are editing
+
+  // --- Change 1: State for success message ---
+  const [showSaveSuccess, setShowSaveSuccess] = useState(false);
+
+  // --- Change 3: Effect to load draft data when the component opens in edit mode ---
+  useEffect(() => {
+    if (draftToEdit) {
+      setInstructionDetails(draftToEdit.instructionDetails);
+      setPaymentRows(draftToEdit.paymentRows);
+      setTotalAmount(draftToEdit.totalAmount);
+      setDraftId(draftToEdit.id);
+      clearDraftToEdit(); // Clear it so it doesn't re-load on a page refresh
+    }
+  }, [draftToEdit, clearDraftToEdit]);
+
+
+  const handleSaveDraft = () => {
+    if (paymentRows) {
+      const draftData = {
+        id: draftId, // Will be null for new drafts, or have an ID if editing
+        instructionDetails,
+        paymentRows,
+        totalAmount,
+      };
+      saveOrUpdateDraft(draftData);
+
+      // --- Change 1: Show success message instead of alert ---
+      setShowSaveSuccess(true);
+      setTimeout(() => setShowSaveSuccess(false), 3000); // Hide after 3 seconds
+    }
+  };
+
+  const handlePreview = () => {
+     if (paymentRows) {
+      const paymentData = {
+        instructionDetails,
+        paymentRows,
+        totalAmount,
+      };
+      setCurrentPayment(paymentData);
+      navigate('/preview');
+    }
+  };
+
+  return (
+    <div className="page-container">
+      <Header />
+      <TopNav />
+      <main className="main-content">
+        {/* --- Change 1: Success message component --- */}
+        {showSaveSuccess && (
+          <div className="save-success-message">
+            Draft saved successfully!
+          </div>
+        )}
+
+        <div className="page-header">
+          <h1>Payroll Payments</h1>
+          <div className="page-actions">
+            <button className="btn btn-secondary" onClick={handleSaveDraft}>Save as Draft</button>
+            <button className="btn btn-primary" onClick={handlePreview}>Preview & Submit</button>
+          </div>
+        </div>
+
+        <InstructionDetails 
+          details={instructionDetails}
+          onDetailsChange={setInstructionDetails}
+        />
+        <PaymentDetails 
+          initialRows={paymentRows} // Pass initial rows for editing
+          onDataChange={(rows, total) => {
+            setPaymentRows(rows);
+            setTotalAmount(total);
+          }}
+        />
+      </main>
+    </div>
+  );
+};
+
+export default PayrollPayments;
+
+
+3. PayrollPayments.css
+
+/* --- Styles from previous steps remain unchanged --- */
+
+.main-content {
+  padding: 25px;
+  max-width: 1600px;
+  margin: 0 auto;
+  position: relative; /* Needed for positioning the success message */
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+}
+
+/* ... other existing styles from previous steps ... */
+
+.btn-secondary:hover {
+  background-color: var(--sc-blue);
+  color: #fff;
+}
+
+/* --- Change 1: Style for the success message --- */
+.save-success-message {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: var(--sc-dark-blue);
+  color: white;
+  padding: 12px 25px;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  font-weight: 700;
+  z-index: 1000;
+  animation: fadeInOut 3s ease-in-out;
+}
+
+@keyframes fadeInOut {
+  0% { opacity: 0; transform: translate(-50%, -20px); }
+  20% { opacity: 1; transform: translate(-50%, 0); }
+  80% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -20px); }
+}
+
+4. InstructionDetails.js
+
+import React from 'react';
+import './InstructionDetails.css';
+
+// Now receives its state and a function to change it from the parent
+const InstructionDetails = ({ details, onDetailsChange }) => {
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    onDetailsChange(prevDetails => ({
+      ...prevDetails,
+      [name]: value,
+    }));
+  };
+
+  return (
+    <div className="instruction-card">
+      <h3 className="card-title">Instruction Details</h3>
+      <div className="instruction-form">
+        <div className="form-group">
+          <label htmlFor="batch">Batch</label>
+          <select id="batch" name="batch" value={details.batch} onChange={handleChange}>
+            <option value="">Select Batch</option>
+            <option value="1">Batch 1</option>
+            <option value="2">Batch 2</option>
+            <option value="3">Batch 3</option>
+          </select>
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="debitAccount">Debit Account</label>
+          <select id="debitAccount" name="debitAccount" value={details.debitAccount} onChange={handleChange}>
+            <option value="">Select Debit Account</option>
+            <option value="account1">Account 1 - ****1234</option>
+            <option value="account2">Account 2 - ****5678</option>
+          </select>
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="paymentCurrency">Payment Currency</label>
+          <select id="paymentCurrency" name="paymentCurrency" value={details.paymentCurrency} onChange={handleChange}>
+            <option value="">Select Currency</option>
+            <option value="USD">USD - US Dollar</option>
+            <option value="EUR">EUR - Euro</option>
+            <option value="INR">INR - Indian Rupee</option>
+          </select>
+        </div>
+        
+        <div className="form-group">
+          <label htmlFor="payrollType">Payroll Type</label>
+          <select id="payrollType" name="payrollType" value={details.payrollType} onChange={handleChange}>
+            <option value="">Select Payroll Type</option>
+            <option value="monthly">Monthly Salary</option>
+            <option value="bonus">Bonus</option>
+          </select>
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="valueDate">Date</label>
+          <input type="date" id="valueDate" name="valueDate" value={details.valueDate} onChange={handleChange} />
+        </div>
+
+      </div>
+    </div>
+  );
+};
+
+export default InstructionDetails;
+
+5. PaymentDetails.js
+
+import React, { useState, useEffect, useRef } from 'react';
+import { FiPlus, FiTrash2, FiUpload } from 'react-icons/fi';
+import * as XLSX from 'xlsx';
+import './PaymentDetails.css';
+
+const createNewRow = (id) => ({
+  id, batchId: '', payeeName: '', beneficiaryDetails: '',
+  yourReference: '', paymentReference: '', amount: '', notes: '',
+});
+
+// Receives `initialRows` for editing
+const PaymentDetails = ({ initialRows, onDataChange }) => {
+  const [rows, setRows] = useState(initialRows || [createNewRow(1)]);
+  const [totalAmount, setTotalAmount] = useState(0);
+  const fileInputRef = useRef(null);
+
+  // --- Change 3: Effect to load draft rows when `initialRows` prop changes ---
+  useEffect(() => {
+    if (initialRows) {
+      setRows(initialRows);
+    }
+  }, [initialRows]);
+
+
+  useEffect(() => {
+    const total = rows.reduce((sum, row) => sum + (parseFloat(row.amount) || 0), 0);
+    setTotalAmount(total);
+    if (onDataChange) {
+      onDataChange(rows, total);
+    }
+  }, [rows, onDataChange]);
+
+  const handleInputChange = (id, event) => {
+    const { name, value } = event.target;
+    setRows(currentRows => currentRows.map(row => (row.id === id ? { ...row, [name]: value } : row)));
+  };
+
+  const addRow = () => {
+    const newId = rows.length > 0 ? Math.max(...rows.map(r => r.id)) + 1 : 1;
+    setRows([...rows, createNewRow(newId)]);
+  };
+
+  const deleteRow = (id) => {
+    if (rows.length > 1) {
+      setRows(rows.filter(row => row.id !== id));
+    }
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current.click();
+  };
+
+  const handleFileImport = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const data = event.target.result;
+      const workbook = XLSX.read(data, { type: 'binary' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      const maxId = rows.length > 0 ? Math.max(...rows.map(r => r.id)) : 0;
+      const newRowsFromExcel = jsonData.map((row, index) => ({
+        id: maxId + index + 1, batchId: row['Batch ID'] || '', payeeName: row['Payee Name'] || '',
+        beneficiaryDetails: row['Beneficiary Details'] || '', yourReference: row['Your Reference'] || '',
+        paymentReference: row['Payment Reference'] || '', amount: row['Amount'] || 0, notes: row['Notes to Payee'] || '',
+      }));
+      setRows(prevRows => {
+        const isInitialEmptyRow = prevRows.length === 1 && !prevRows[0].payeeName && !prevRows[0].amount;
+        return isInitialEmptyRow ? newRowsFromExcel : [...prevRows, ...newRowsFromExcel];
+      });
+      e.target.value = null;
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  return (
+    <div className="payment-details-card">
+       <div className="payment-details-header">
+         <h3 className="card-title">Payment Details</h3>
+         <div className="payment-details-actions">
+           <button onClick={handleImportClick} className="btn-import">
+              <FiUpload /> Import a File
+           </button>
+           <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept=".xlsx, .xls, .csv" onChange={handleFileImport} />
+           <button onClick={addRow} className="add-row-button-header">
+              <FiPlus /> Add Another Line
+           </button>
+         </div>
+       </div>
+      <div className="payment-table-container">
+        <table className="payment-table">
+          <thead>
+            <tr>
+              <th>Batch ID</th><th>Payee Name</th><th>Beneficiary Details</th><th>Your Reference</th>
+              <th>Payment Reference</th><th>Amount</th><th>Notes to Payee</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.id}>
+                <td><input type="text" name="batchId" value={row.batchId} placeholder="Batch ID" onChange={(e) => handleInputChange(row.id, e)} /></td>
+                <td><input type="text" name="payeeName" value={row.payeeName} placeholder="Pay Recipient" onChange={(e) => handleInputChange(row.id, e)} /></td>
+                <td><input type="text" name="beneficiaryDetails" value={row.beneficiaryDetails} placeholder="Beneficiary" onChange={(e) => handleInputChange(row.id, e)} /></td>
+                <td><input type="text" name="yourReference" value={row.yourReference} placeholder="Your Reference" onChange={(e) => handleInputChange(row.id, e)} /></td>
+                <td><input type="text" name="paymentReference" value={row.paymentReference} placeholder="Pay Recipient" onChange={(e) => handleInputChange(row.id, e)} /></td>
+                <td><input type="number" name="amount" value={row.amount} placeholder="0.00" className="amount-input" onChange={(e) => handleInputChange(row.id, e)} /></td>
+                <td><input type="text" name="notes" value={row.notes} placeholder="Enter the value" onChange={(e) => handleInputChange(row.id, e)} /></td>
+                <td>
+                  <button onClick={() => deleteRow(row.id)} className="delete-row-button" disabled={rows.length === 1 && !row.payeeName && !row.amount}>
+                    <FiTrash2 />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="payment-footer">
+        <div className="total-amount">
+          <span>Total Amount</span>
+          <span className="total-value">{totalAmount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default PaymentDetails;
+
+6. DraftsPage.js
+
+import React from 'react';
+import Header from '../../components/Header/Header';
+import TopNav from '../../components/TopNav/TopNav';
+import './DraftsPage.css';
+
+// Receives navigate and handleEditDraft from the wrapper in App.js
+const DraftsPage = ({ drafts, handleEditDraft, navigate }) => {
+
+  const onViewEditClick = (draftId) => {
+    handleEditDraft(draftId); // Set the draft to be edited in App state
+    navigate('/'); // Navigate to the payments page
+  };
+
+  return (
+    <div className="page-container">
+      <Header />
+      <TopNav />
+      <main className="main-content">
+        <div className="page-header">
+          <h1>Saved Drafts</h1>
+        </div>
+        
+        <div className="drafts-list">
+          {drafts.length === 0 ? (
+            <div className="no-drafts-message">
+              <h3>No Saved Drafts</h3>
+              <p>When you save a payment as a draft, you'll find it here.</p>
+            </div>
+          ) : (
+            drafts.map(draft => (
+              <div key={draft.id} className="draft-card">
+                <div className="draft-card-header">
+                  <h3>Batch: {draft.instructionDetails.batch || 'Untitled'}</h3>
+                  <span className="draft-timestamp">Saved on: {draft.savedAt}</span>
+                </div>
+                <div className="draft-card-body">
+                  <div className="draft-detail-item">
+                    <span>Debit Account</span>
+                    <strong>{draft.instructionDetails.debitAccount || 'N/A'}</strong>
+                  </div>
+                   <div className="draft-detail-item">
+                    <span>Payments</span>
+                    <strong>{draft.paymentRows.length}</strong>
+                  </div>
+                   <div className="draft-detail-item">
+                    <span>Total Amount</span>
+                    <strong className="total-amount-display">{draft.totalAmount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</strong>
+                  </div>
+                </div>
+                <div className="draft-card-footer">
+                  {/* --- Change 3: Button is now functional --- */}
+                  <button className="btn-edit-draft" onClick={() => onViewEditClick(draft.id)}>
+                    View / Edit
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default DraftsPage;
+
+7. DraftsPage.css
+
+.drafts-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 25px;
+}
+
+.no-drafts-message {
+  grid-column: 1 / -1; /* Make it span all columns */
+  text-align: center;
+  font-size: 1.1em;
+  color: #5e6c84;
+  padding: 50px 20px;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.no-drafts-message h3 {
+  color: var(--sc-dark-blue);
+  margin-top: 0;
+}
+
+.draft-card {
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  transition: box-shadow 0.3s ease, transform 0.3s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.draft-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 6px 12px rgba(0,45,86,0.1);
+}
+
+.draft-card-header {
+  padding: 15px 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.draft-card-header h3 {
+  margin: 0;
+  color: var(--sc-dark-blue);
+  font-size: 1.2em;
+}
+
+.draft-timestamp {
+  font-size: 0.8em;
+  color: #5e6c84;
+}
+
+.draft-card-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  flex-grow: 1; /* Makes the body take available space */
+}
+
+.draft-detail-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.draft-detail-item span {
+  font-size: 0.85em;
+  color: #5e6c84;
+  margin-bottom: 4px;
+}
+
+.draft-detail-item strong {
+  font-size: 1em;
+  color: var(--text-dark);
+}
+
+.total-amount-display {
+  color: var(--sc-green);
+  font-weight: 700;
+}
+
+
+.draft-card-footer {
+  padding: 15px 20px;
+  text-align: right;
+  background-color: #f4f6f9;
+  border-top: 1px solid var(--border-color);
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
+/* --- Change 3: Improved button style --- */
+.btn-edit-draft {
+  background-color: var(--sc-blue);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.btn-edit-draft:hover {
+  background-color: var(--sc-dark-blue);
+}
