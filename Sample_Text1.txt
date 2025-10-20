@@ -1,0 +1,619 @@
+1. App.js
+
+import React, { useState } from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import PayrollPayments from './pages/PayrollPayments/PayrollPayments';
+import DraftsPage from './pages/DraftsPage/DraftsPage';
+import PreviewPage from './pages/PreviewPage/PreviewPage';
+import './index.css';
+
+function App() {
+  // State is "lifted up" to be shared by multiple pages
+  const [drafts, setDrafts] = useState([]); // Stores all saved drafts
+  const [currentPayment, setCurrentPayment] = useState(null); // Stores the batch for the preview page
+
+  // Function to save a draft, passed down to PayrollPayments page
+  const saveDraft = (draftData) => {
+    const newDraft = {
+      ...draftData,
+      id: `draft_${Date.now()}`, // Add a unique ID for the key prop
+      savedAt: new Date().toLocaleString(), // Add a timestamp
+    };
+    setDrafts(prevDrafts => [...prevDrafts, newDraft]);
+    // A simple confirmation
+    alert('Draft saved successfully!');
+  };
+
+  return (
+    <Router>
+      <Routes>
+        <Route 
+          path="/" 
+          element={
+            <PayrollPayments 
+              saveDraft={saveDraft} 
+              setCurrentPayment={setCurrentPayment} 
+            />
+          } 
+        />
+        <Route 
+          path="/drafts" 
+          element={<DraftsPage drafts={drafts} />} 
+        />
+        <Route 
+          path="/preview" 
+          element={<PreviewPage paymentData={currentPayment} />} 
+        />
+        {/* Placeholder pages for your other links */}
+        <Route path="/transfers" element={<div style={{padding: '2rem'}}>Transfers Page</div>} />
+        <Route path="/history" element={<div style={{padding: '2rem'}}>History Page</div>} />
+      </Routes>
+    </Router>
+  );
+}
+
+export default App;
+
+
+2. DraftsPage.js
+
+import React from 'react';
+import Header from '../../components/Header/Header';
+import TopNav from '../../components/TopNav/TopNav';
+import './DraftsPage.css';
+
+const DraftsPage = ({ drafts }) => {
+  return (
+    <div className="page-container">
+      <Header />
+      <TopNav />
+      <main className="main-content">
+        <div className="page-header">
+          <h1>Saved Drafts</h1>
+        </div>
+        
+        <div className="drafts-list">
+          {drafts.length === 0 ? (
+            <p className="no-drafts-message">You have no saved drafts.</p>
+          ) : (
+            drafts.map(draft => (
+              <div key={draft.id} className="draft-card">
+                <div className="draft-card-header">
+                  <h3>Batch: {draft.instructionDetails.batch || 'N/A'}</h3>
+                  <span>Saved on: {draft.savedAt}</span>
+                </div>
+                <div className="draft-card-body">
+                  <p><strong>Debit Account:</strong> {draft.instructionDetails.debitAccount}</p>
+                  <p><strong>Total Amount:</strong> {draft.totalAmount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</p>
+                  <p><strong>Number of Payments:</strong> {draft.paymentRows.length}</p>
+                </div>
+                <div className="draft-card-footer">
+                  <button className="btn-secondary">View/Edit</button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default DraftsPage;
+
+
+3. DraftsPage.css
+
+.drafts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.no-drafts-message {
+  text-align: center;
+  font-size: 1.2em;
+  color: #666;
+  padding: 40px;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.draft-card {
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  transition: box-shadow 0.2s ease-in-out;
+}
+
+.draft-card:hover {
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.draft-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.draft-card-header h3 {
+  margin: 0;
+  color: var(--sc-dark-blue);
+}
+
+.draft-card-header span {
+  font-size: 0.9em;
+  color: #5e6c84;
+}
+
+.draft-card-body {
+  padding: 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+}
+
+.draft-card-body p {
+  margin: 0;
+}
+
+.draft-card-body strong {
+  color: var(--text-dark);
+}
+
+.draft-card-footer {
+  padding: 15px 20px;
+  text-align: right;
+  background-color: var(--background-light);
+  border-top: 1px solid var(--border-color);
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
+
+4. PreviewPage.js
+
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import Header from '../../components/Header/Header';
+import TopNav from '../../components/TopNav/TopNav';
+import './PreviewPage.css';
+
+const PreviewPage = ({ paymentData }) => {
+  const navigate = useNavigate();
+  const [isSubmitted, setIsSubmitted] = useState(false);
+
+  if (!paymentData) {
+    return (
+      <div className="page-container">
+        <Header />
+        <TopNav />
+        <main className="main-content" style={{textAlign: 'center'}}>
+          <p className="no-data-message">No payment data to preview. Please start a new payment.</p>
+          <button className="btn-primary" onClick={() => navigate('/')}>Go to Payments</button>
+        </main>
+      </div>
+    );
+  }
+
+  const handleConfirmSubmit = () => {
+    console.log("Submitting:", paymentData);
+    setIsSubmitted(true);
+  };
+
+  const handleGoBack = () => {
+    navigate(-1); // Go back to the previous page (PayrollPayments)
+  };
+
+  const { instructionDetails, paymentRows, totalAmount } = paymentData;
+
+  return (
+    <div className="page-container">
+      <Header />
+      <TopNav />
+      <main className="main-content">
+        <div className="page-header">
+          <h1>Preview & Submit Payment</h1>
+        </div>
+
+        {isSubmitted ? (
+          <div className="success-message">
+            Batch Submitted Successfully!
+          </div>
+        ) : (
+          <>
+            <div className="preview-section">
+              <h3>Instruction Details</h3>
+              <div className="details-grid">
+                <p><strong>Batch:</strong> {instructionDetails.batch || 'N/A'}</p>
+                <p><strong>Debit Account:</strong> {instructionDetails.debitAccount}</p>
+                <p><strong>Payment Currency:</strong> {instructionDetails.paymentCurrency}</p>
+                <p><strong>Payroll Type:</strong> {instructionDetails.payrollType}</p>
+                <p><strong>Date:</strong> {instructionDetails.valueDate}</p>
+              </div>
+            </div>
+
+            <div className="preview-section">
+              <h3>Payment Details</h3>
+              <div className="preview-table-container">
+                <table className="preview-table">
+                  <thead>
+                    <tr>
+                      <th>Batch ID</th>
+                      <th>Payee Name</th>
+                      <th>Beneficiary Details</th>
+                      <th>Your Reference</th>
+                      <th>Payment Reference</th>
+                      <th style={{textAlign: 'right'}}>Amount</th>
+                      <th>Notes to Payee</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paymentRows.map(row => (
+                      <tr key={row.id}>
+                        <td>{row.batchId}</td>
+                        <td>{row.payeeName}</td>
+                        <td>{row.beneficiaryDetails}</td>
+                        <td>{row.yourReference}</td>
+                        <td>{row.paymentReference}</td>
+                        <td style={{textAlign: 'right'}}>{parseFloat(row.amount || 0).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td>
+                        <td>{row.notes}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colSpan="5" style={{textAlign: 'right', fontWeight: 'bold'}}>Total Amount</td>
+                      <td style={{textAlign: 'right', fontWeight: 'bold'}}>{totalAmount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+
+            <div className="preview-actions">
+              <button className="btn btn-secondary" onClick={handleGoBack}>Go Back to Edit</button>
+              <button className="btn btn-primary" onClick={handleConfirmSubmit}>Confirm Submit</button>
+            </div>
+          </>
+        )}
+      </main>
+    </div>
+  );
+};
+
+export default PreviewPage;
+
+
+5. PreviewPage.css
+
+.preview-section {
+  background-color: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 25px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.preview-section h3 {
+  margin-top: 0;
+  margin-bottom: 20px;
+  color: var(--sc-dark-blue);
+}
+
+.details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 15px;
+}
+
+.details-grid p {
+  margin: 0;
+}
+
+.preview-table-container {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.preview-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.preview-table th, .preview-table td {
+  padding: 12px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.preview-table th {
+  background-color: var(--background-light);
+  font-size: 0.9em;
+  color: #5e6c84;
+}
+
+.preview-table tfoot td {
+  font-size: 1.1em;
+  color: var(--sc-dark-blue);
+}
+
+.preview-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 15px;
+  margin-top: 25px;
+}
+
+.success-message {
+  text-align: center;
+  font-size: 1.5em;
+  font-weight: bold;
+  color: var(--sc-green);
+  padding: 50px;
+  background-color: #e8f5e9;
+  border-radius: 8px;
+  border: 1px solid var(--sc-green);
+}
+
+.no-data-message {
+  text-align: center;
+  font-size: 1.2em;
+  color: #666;
+  padding: 40px;
+}
+
+
+6. PayrollPayments.js
+import React, { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import Header from '../../components/Header/Header';
+import TopNav from '../../components/TopNav/TopNav';
+import InstructionDetails from '../../components/InstructionDetails/InstructionDetails';
+import PaymentDetails from '../../components/PaymentDetails/PaymentDetails';
+import './PayrollPayments.css';
+
+// Get the new functions as props from App.js
+const PayrollPayments = ({ saveDraft, setCurrentPayment }) => {
+  const navigate = useNavigate();
+  
+  // A ref to get values from the form fields in InstructionDetails
+  const formRef = useRef();
+
+  // State to hold data from the PaymentDetails child component
+  const [paymentRows, setPaymentRows] = useState(null);
+  const [totalAmount, setTotalAmount] = useState(0);
+
+  const handleSaveDraft = () => {
+    const form = formRef.current;
+    if (form && paymentRows) {
+      const instructionDetails = {
+        batch: form.batch.value,
+        debitAccount: form.debitAccount.value,
+        paymentCurrency: form.paymentCurrency.value,
+        payrollType: form.payrollType.value,
+        valueDate: form.valueDate.value,
+      };
+
+      const draftData = {
+        instructionDetails,
+        paymentRows,
+        totalAmount,
+      };
+      saveDraft(draftData); // Call the function from App.js
+    }
+  };
+
+  const handlePreview = () => {
+    const form = formRef.current;
+     if (form && paymentRows) {
+      const instructionDetails = {
+        batch: form.batch.value,
+        debitAccount: form.debitAccount.value,
+        paymentCurrency: form.paymentCurrency.value,
+        payrollType: form.payrollType.value,
+        valueDate: form.valueDate.value,
+      };
+
+      const paymentData = {
+        instructionDetails,
+        paymentRows,
+        totalAmount,
+      };
+      setCurrentPayment(paymentData); // Save the data to App.js state
+      navigate('/preview'); // Navigate to the new preview page
+    }
+  };
+
+  return (
+    <div className="page-container">
+      <Header />
+      <TopNav />
+      <main className="main-content">
+        <div className="page-header">
+          <h1>Payroll Payments</h1>
+          <div className="page-actions">
+            <button className="btn btn-secondary" onClick={handleSaveDraft}>Save as Draft</button>
+            <button className="btn btn-primary" onClick={handlePreview}>Preview & Submit</button>
+          </div>
+        </div>
+        {/* Wrap InstructionDetails in a form with a ref to easily access its data */}
+        <form ref={formRef}>
+          <InstructionDetails />
+        </form>
+        {/* Pass a function to PaymentDetails to get its data */}
+        <PaymentDetails 
+          onDataChange={(rows, total) => {
+            setPaymentRows(rows);
+            setTotalAmount(total);
+          }}
+        />
+      </main>
+    </div>
+  );
+};
+
+export default PayrollPayments;
+
+
+7. PaymentDetails.js
+import React, { useState, useEffect, useRef } from 'react';
+import { FiPlus, FiTrash2, FiUpload } from 'react-icons/fi';
+import * as XLSX from 'xlsx';
+import './PaymentDetails.css';
+
+const createNewRow = (id) => ({
+  id,
+  batchId: '',
+  payeeName: '',
+  beneficiaryDetails: '',
+  yourReference: '',
+  paymentReference: '',
+  amount: '',
+  notes: '',
+});
+
+// Get the onDataChange function as a prop
+const PaymentDetails = ({ onDataChange }) => {
+  const [rows, setRows] = useState([createNewRow(1)]);
+  const [totalAmount, setTotalAmount] = useState(0);
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    const total = rows.reduce((sum, row) => sum + (parseFloat(row.amount) || 0), 0);
+    setTotalAmount(total);
+    // When data changes, call the function passed from the parent
+    if (onDataChange) {
+      onDataChange(rows, total);
+    }
+  }, [rows, onDataChange]); // Add onDataChange to the dependency array
+
+  const handleInputChange = (id, event) => {
+    const { name, value } = event.target;
+    const newRows = rows.map(row => (row.id === id ? { ...row, [name]: value } : row));
+    setRows(newRows);
+  };
+
+  const addRow = () => {
+    const newId = rows.length > 0 ? Math.max(...rows.map(r => r.id)) + 1 : 1;
+    setRows([...rows, createNewRow(newId)]);
+  };
+
+  const deleteRow = (id) => {
+    if (rows.length > 1) {
+      setRows(rows.filter(row => row.id !== id));
+    }
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current.click();
+  };
+
+  const handleFileImport = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const data = event.target.result;
+      const workbook = XLSX.read(data, { type: 'binary' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      
+      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+      const maxId = rows.length > 0 ? Math.max(...rows.map(r => r.id)) : 0;
+
+      const newRowsFromExcel = jsonData.map((row, index) => ({
+        id: maxId + index + 1,
+        batchId: row['Batch ID'] || '',
+        payeeName: row['Payee Name'] || '',
+        beneficiaryDetails: row['Beneficiary Details'] || '',
+        yourReference: row['Your Reference'] || '',
+        paymentReference: row['Payment Reference'] || '',
+        amount: row['Amount'] || 0,
+        notes: row['Notes to Payee'] || '',
+      }));
+
+      setRows(prevRows => {
+        const isInitialEmptyRow = prevRows.length === 1 && !prevRows[0].payeeName && !prevRows[0].amount;
+        if (isInitialEmptyRow) {
+          return newRowsFromExcel;
+        }
+        return [...prevRows, ...newRowsFromExcel];
+      });
+
+      e.target.value = null;
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  return (
+    <div className="payment-details-card">
+       <div className="payment-details-header">
+         <h3 className="card-title">Payment Details</h3>
+         <div className="payment-details-actions">
+           <button onClick={handleImportClick} className="btn-import">
+              <FiUpload /> Import a File
+           </button>
+           <input
+              type="file"
+              ref={fileInputRef}
+              style={{ display: 'none' }}
+              accept=".xlsx, .xls, .csv"
+              onChange={handleFileImport}
+           />
+           <button onClick={addRow} className="add-row-button-header">
+              <FiPlus /> Add Another Line
+           </button>
+         </div>
+       </div>
+      <div className="payment-table-container">
+        <table className="payment-table">
+          <thead>
+            <tr>
+              <th>Batch ID</th>
+              <th>Payee Name</th>
+              <th>Beneficiary Details</th>
+              <th>Your Reference</th>
+              <th>Payment Reference</th>
+              <th>Amount</th>
+              <th>Notes to Payee</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.id}>
+                <td><input type="text" name="batchId" value={row.batchId} placeholder="Batch ID" onChange={(e) => handleInputChange(row.id, e)} /></td>
+                <td><input type="text" name="payeeName" value={row.payeeName} placeholder="Pay Recipient" onChange={(e) => handleInputChange(row.id, e)} /></td>
+                <td><input type="text" name="beneficiaryDetails" value={row.beneficiaryDetails} placeholder="Beneficiary" onChange={(e) => handleInputChange(row.id, e)} /></td>
+                <td><input type="text" name="yourReference" value={row.yourReference} placeholder="Your Reference" onChange={(e) => handleInputChange(row.id, e)} /></td>
+                <td><input type="text" name="paymentReference" value={row.paymentReference} placeholder="Pay Recipient" onChange={(e) => handleInputChange(row.id, e)} /></td>
+                <td><input type="number" name="amount" value={row.amount} placeholder="0.00" className="amount-input" onChange={(e) => handleInputChange(row.id, e)} /></td>
+                <td><input type="text" name="notes" value={row.notes} placeholder="Enter the value" onChange={(e) => handleInputChange(row.id, e)} /></td>
+                <td>
+                  <button onClick={() => deleteRow(row.id)} className="delete-row-button" disabled={rows.length === 1 && !row.payeeName && !row.amount}>
+                    <FiTrash2 />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="payment-footer">
+        <div className="total-amount">
+          <span>Total Amount</span>
+          <span className="total-value">{totalAmount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default PaymentDetails;
