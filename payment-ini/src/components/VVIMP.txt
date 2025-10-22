@@ -1,0 +1,635 @@
+1. StartApp.java
+
+package com.example.paymentapp;
+
+import io.swagger.v3.oas.annotations.OpenAPIDefinition;
+import io.swagger.v3.oas.annotations.info.Info;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
+
+@SpringBootApplication
+@EnableJpaAuditing // Enables automatic setting of created/updated timestamps
+@OpenAPIDefinition(info = @Info(
+		title = "Payment Initiation API",
+		version = "1.0",
+		description = "Backend API for the Payroll Payments Application"
+))
+public class PaymentappBackendApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(PaymentappBackendApplication.class, args);
+	}
+
+}
+
+2.Config package
+2.1 - WebConfig.java
+
+package com.example.paymentapp.config;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+@Configuration
+public class WebConfig implements WebMvcConfigurer {
+
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/api/**") // Apply to all endpoints under /api/
+                .allowedOrigins("http://localhost:3000") // Your React app's URL
+                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                .allowedHeaders("*")
+                .allowCredentials(true);
+    }
+}
+
+
+3. model package
+3.1 - PaymentStatus.java
+
+package com.example.paymentapp.model;
+
+public enum PaymentStatus {
+    DRAFT,
+    SUBMITTED
+}
+
+
+3.2 PaymentBatch.java
+
+package com.example.paymentapp.model;
+
+import jakarta.persistence.*;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
+@Entity
+@Table(name = "payment_batches")
+@EntityListeners(AuditingEntityListener.class)
+public class PaymentBatch {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = "batch_name")
+    private String batchName;
+
+    @Column(nullable = false)
+    private String debitAccount;
+
+    private String paymentCurrency;
+    private String payrollType;
+    private LocalDate valueDate;
+
+    @Column(nullable = false)
+    private BigDecimal totalAmount;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private PaymentStatus status;
+
+    @CreatedDate
+    @Column(nullable = false, updatable = false)
+    private LocalDateTime savedAt;
+
+    @OneToMany(
+        mappedBy = "paymentBatch",
+        cascade = CascadeType.ALL,
+        orphanRemoval = true
+    )
+    private List<PaymentRow> paymentRows = new ArrayList<>();
+
+    // --- Helper methods ---
+    public void addPaymentRow(PaymentRow row) {
+        paymentRows.add(row);
+        row.setPaymentBatch(this);
+    }
+
+    public void removePaymentRow(PaymentRow row) {
+        paymentRows.remove(row);
+        row.setPaymentBatch(null);
+    }
+
+    // --- Getters and Setters ---
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public String getBatchName() { return batchName; }
+    public void setBatchName(String batchName) { this.batchName = batchName; }
+    public String getDebitAccount() { return debitAccount; }
+    public void setDebitAccount(String debitAccount) { this.debitAccount = debitAccount; }
+    public String getPaymentCurrency() { return paymentCurrency; }
+    public void setPaymentCurrency(String paymentCurrency) { this.paymentCurrency = paymentCurrency; }
+    public String getPayrollType() { return payrollType; }
+    public void setPayrollType(String payrollType) { this.payrollType = payrollType; }
+    public LocalDate getValueDate() { return valueDate; }
+    public void setValueDate(LocalDate valueDate) { this.valueDate = valueDate; }
+    public BigDecimal getTotalAmount() { return totalAmount; }
+    public void setTotalAmount(BigDecimal totalAmount) { this.totalAmount = totalAmount; }
+    public PaymentStatus getStatus() { return status; }
+    public void setStatus(PaymentStatus status) { this.status = status; }
+    public LocalDateTime getSavedAt() { return savedAt; }
+    public void setSavedAt(LocalDateTime savedAt) { this.savedAt = savedAt; }
+    public List<PaymentRow> getPaymentRows() { return paymentRows; }
+    public void setPaymentRows(List<PaymentRow> paymentRows) { this.paymentRows = paymentRows; }
+}
+
+3.3 PaymentRow.java
+
+package com.example.paymentapp.model;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import jakarta.persistence.*;
+
+import java.math.BigDecimal;
+
+@Entity
+@Table(name = "payment_rows")
+public class PaymentRow {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String userBatchId;
+    
+    @Column(nullable = false)
+    private String payeeName;
+
+    @Column(nullable = false)
+    private String beneficiaryDetails;
+
+    private String yourReference;
+    private String paymentReference;
+
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal amount;
+
+    private String notes;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "payment_batch_id", nullable = false)
+    @JsonIgnore
+    private PaymentBatch paymentBatch;
+
+    // --- Getters and Setters ---
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public String getUserBatchId() { return userBatchId; }
+    public void setUserBatchId(String userBatchId) { this.userBatchId = userBatchId; }
+    public String getPayeeName() { return payeeName; }
+    public void setPayeeName(String payeeName) { this.payeeName = payeeName; }
+    public String getBeneficiaryDetails() { return beneficiaryDetails; }
+    public void setBeneficiaryDetails(String beneficiaryDetails) { this.beneficiaryDetails = beneficiaryDetails; }
+    public String getYourReference() { return yourReference; }
+    public void setYourReference(String yourReference) { this.yourReference = yourReference; }
+    public String getPaymentReference() { return paymentReference; }
+    public void setPaymentReference(String paymentReference) { this.paymentReference = paymentReference; }
+    public BigDecimal getAmount() { return amount; }
+    public void setAmount(BigDecimal amount) { this.amount = amount; }
+    public String getNotes() { return notes; }
+    public void setNotes(String notes) { this.notes = notes; }
+    public PaymentBatch getPaymentBatch() { return paymentBatch; }
+    public void setPaymentBatch(PaymentBatch paymentBatch) { this.paymentBatch = paymentBatch; }
+}
+
+
+
+4. DTO Package
+4.1 InstructionDetailsDto.java
+
+package com.example.paymentapp.dto;
+
+import java.time.LocalDate;
+
+public class InstructionDetailsDto {
+    private String batch;
+    private String debitAccount;
+    private String paymentCurrency;
+    private String payrollType;
+    private LocalDate valueDate;
+
+    // Getters and Setters
+    public String getBatch() { return batch; }
+    public void setBatch(String batch) { this.batch = batch; }
+    public String getDebitAccount() { return debitAccount; }
+    public void setDebitAccount(String debitAccount) { this.debitAccount = debitAccount; }
+    public String getPaymentCurrency() { return paymentCurrency; }
+    public void setPaymentCurrency(String paymentCurrency) { this.paymentCurrency = paymentCurrency; }
+    public String getPayrollType() { return payrollType; }
+    public void setPayrollType(String payrollType) { this.payrollType = payrollType; }
+    public LocalDate getValueDate() { return valueDate; }
+    public void setValueDate(LocalDate valueDate) { this.valueDate = valueDate; }
+}
+
+4.2 PaymentRowDto.java
+
+package com.example.paymentapp.dto;
+
+import java.math.BigDecimal;
+
+public class PaymentRowDto {
+    private Long id;
+    private String batchId;
+    private String payeeName;
+    private String beneficiaryDetails;
+    private String yourReference;
+    private String paymentReference;
+    private BigDecimal amount;
+    private String notes;
+
+    // Getters and Setters
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public String getBatchId() { return batchId; }
+    public void setBatchId(String batchId) { this.batchId = batchId; }
+    public String getPayeeName() { return payeeName; }
+    public void setPayeeName(String payeeName) { this.payeeName = payeeName; }
+    public String getBeneficiaryDetails() { return beneficiaryDetails; }
+    public void setBeneficiaryDetails(String beneficiaryDetails) { this.beneficiaryDetails = beneficiaryDetails; }
+    public String getYourReference() { return yourReference; }
+    public void setYourReference(String yourReference) { this.yourReference = yourReference; }
+    public String getPaymentReference() { return paymentReference; }
+    public void setPaymentReference(String paymentReference) { this.paymentReference = paymentReference; }
+    public BigDecimal getAmount() { return amount; }
+    public void setAmount(BigDecimal amount) { this.amount = amount; }
+    public String getNotes() { return notes; }
+    public void setNotes(String notes) { this.notes = notes; }
+}
+
+4.3 PaymentBatchRequest.java
+
+package com.example.paymentapp.dto;
+
+import java.math.BigDecimal;
+import java.util.List;
+
+public class PaymentBatchRequest {
+    private InstructionDetailsDto instructionDetails;
+    private List<PaymentRowDto> paymentRows;
+    private BigDecimal totalAmount;
+
+    // Getters and Setters
+    public InstructionDetailsDto getInstructionDetails() { return instructionDetails; }
+    public void setInstructionDetails(InstructionDetailsDto instructionDetails) { this.instructionDetails = instructionDetails; }
+    public List<PaymentRowDto> getPaymentRows() { return paymentRows; }
+    public void setPaymentRows(List<PaymentRowDto> paymentRows) { this.paymentRows = paymentRows; }
+    public BigDecimal getTotalAmount() { return totalAmount; }
+    public void setTotalAmount(BigDecimal totalAmount) { this.totalAmount = totalAmount; }
+}
+
+4.4 PaymentBatchResponse.java
+
+package com.example.paymentapp.dto;
+
+import com.example.paymentapp.model.PaymentStatus;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
+
+public class PaymentBatchResponse {
+    private Long id;
+    private InstructionDetailsDto instructionDetails;
+    private List<PaymentRowDto> paymentRows;
+    private BigDecimal totalAmount;
+    private PaymentStatus status;
+    private LocalDateTime savedAt;
+
+    // Getters and Setters
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public InstructionDetailsDto getInstructionDetails() { return instructionDetails; }
+    public void setInstructionDetails(InstructionDetailsDto instructionDetails) { this.instructionDetails = instructionDetails; }
+    public List<PaymentRowDto> getPaymentRows() { return paymentRows; }
+    public void setPaymentRows(List<PaymentRowDto> paymentRows) { this.paymentRows = paymentRows; }
+    public BigDecimal getTotalAmount() { return totalAmount; }
+    public void setTotalAmount(BigDecimal totalAmount) { this.totalAmount = totalAmount; }
+    public PaymentStatus getStatus() { return status; }
+    public void setStatus(PaymentStatus status) { this.status = status; }
+    public LocalDateTime getSavedAt() { return savedAt; }
+    public void setSavedAt(LocalDateTime savedAt) { this.savedAt = savedAt; }
+}
+
+
+
+5. Repository package
+5.1 PaymentBatchRepository.java
+
+package com.example.paymentapp.repository;
+
+import com.example.paymentapp.model.PaymentBatch;
+import com.example.paymentapp.model.PaymentStatus;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+
+@Repository
+public interface PaymentBatchRepository extends JpaRepository<PaymentBatch, Long> {
+
+    // Finds all batches with the status "DRAFT"
+    List<PaymentBatch> findByStatusOrderBySavedAtDesc(PaymentStatus status);
+}
+
+
+6. Service package
+6.1 PaymentBatchMapper.java
+
+package com.example.paymentapp.service;
+
+import com.example.paymentapp.dto.InstructionDetailsDto;
+import com.example.paymentapp.dto.PaymentBatchRequest;
+import com.example.paymentapp.dto.PaymentBatchResponse;
+import com.example.paymentapp.dto.PaymentRowDto;
+import com.example.paymentapp.model.PaymentBatch;
+import com.example.paymentapp.model.PaymentRow;
+import org.springframework.stereotype.Component;
+
+import java.util.stream.Collectors;
+
+@Component
+public class PaymentBatchMapper {
+
+    // --- Convert DTO Request to Database Entity ---
+    public PaymentBatch toEntity(PaymentBatchRequest request) {
+        PaymentBatch batch = new PaymentBatch();
+        
+        InstructionDetailsDto instructions = request.getInstructionDetails();
+        batch.setBatchName(instructions.getBatch());
+        batch.setDebitAccount(instructions.getDebitAccount());
+        batch.setPaymentCurrency(instructions.getPaymentCurrency());
+        batch.setPayrollType(instructions.getPayrollType());
+        batch.setValueDate(instructions.getValueDate());
+        batch.setTotalAmount(request.getTotalAmount());
+        
+        // Convert child PaymentRowDTOs to PaymentRow entities
+        request.getPaymentRows().forEach(dto -> {
+            batch.addPaymentRow(toPaymentRowEntity(dto));
+        });
+        
+        return batch;
+    }
+
+    // --- Convert Database Entity to DTO Response ---
+    public PaymentBatchResponse toDto(PaymentBatch batch) {
+        PaymentBatchResponse dto = new PaymentBatchResponse();
+        dto.setId(batch.getId());
+        dto.setTotalAmount(batch.getTotalAmount());
+        dto.setStatus(batch.getStatus());
+        dto.setSavedAt(batch.getSavedAt());
+
+        // Convert entity's instruction details to DTO
+        InstructionDetailsDto instructions = new InstructionDetailsDto();
+        instructions.setBatch(batch.getBatchName());
+        instructions.setDebitAccount(batch.getDebitAccount());
+        instructions.setPaymentCurrency(batch.getPaymentCurrency());
+        instructions.setPayrollType(batch.getPayrollType());
+        instructions.setValueDate(batch.getValueDate());
+        dto.setInstructionDetails(instructions);
+
+        // Convert entity's PaymentRows to PaymentRowDTOs
+        dto.setPaymentRows(batch.getPaymentRows().stream()
+                .map(this::toPaymentRowDto)
+                .collect(Collectors.toList()));
+        
+        return dto;
+    }
+    
+    // --- Helper for child PaymentRow entity ---
+    private PaymentRow toPaymentRowEntity(PaymentRowDto dto) {
+        PaymentRow row = new PaymentRow();
+        row.setUserBatchId(dto.getBatchId());
+        row.setPayeeName(dto.getPayeeName());
+        row.setBeneficiaryDetails(dto.getBeneficiaryDetails());
+        row.setYourReference(dto.getYourReference());
+        row.setPaymentReference(dto.getPaymentReference());
+        row.setAmount(dto.getAmount());
+        row.setNotes(dto.getNotes());
+        return row;
+    }
+
+    // --- Helper for child PaymentRow DTO ---
+    private PaymentRowDto toPaymentRowDto(PaymentRow row) {
+        PaymentRowDto dto = new PaymentRowDto();
+        dto.setId(row.getId());
+        dto.setBatchId(row.getUserBatchId());
+        dto.setPayeeName(row.getPayeeName());
+        dto.setBeneficiaryDetails(row.getBeneficiaryDetails());
+        dto.setYourReference(row.getYourReference());
+        dto.setPaymentReference(row.getPaymentReference());
+        dto.setAmount(row.getAmount());
+        dto.setNotes(row.getNotes());
+        return dto;
+    }
+}
+
+
+6.2 PaymentBatchService.java
+
+package com.example.paymentapp.service;
+
+import com.example.paymentapp.dto.PaymentBatchRequest;
+import com.example.paymentapp.dto.PaymentBatchResponse;
+import com.example.paymentapp.model.PaymentBatch;
+import com.example.paymentapp.model.PaymentStatus;
+import com.example.paymentapp.repository.PaymentBatchRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+@Service
+public class PaymentBatchService {
+
+    private final PaymentBatchRepository paymentBatchRepository;
+    private final PaymentBatchMapper mapper;
+
+    @Autowired
+    public PaymentBatchService(PaymentBatchRepository paymentBatchRepository, PaymentBatchMapper mapper) {
+        this.paymentBatchRepository = paymentBatchRepository;
+        this.mapper = mapper;
+    }
+
+    // --- Save as DRAFT ---
+    @Transactional
+    public PaymentBatchResponse saveDraft(PaymentBatchRequest request) {
+        PaymentBatch batch = mapper.toEntity(request);
+        batch.setStatus(PaymentStatus.DRAFT);
+        PaymentBatch savedBatch = paymentBatchRepository.save(batch);
+        return mapper.toDto(savedBatch);
+    }
+
+    // --- Submit a new payment ---
+    @Transactional
+    public PaymentBatchResponse submitPayment(PaymentBatchRequest request) {
+        PaymentBatch batch = mapper.toEntity(request);
+        batch.setStatus(PaymentStatus.SUBMITTED);
+        PaymentBatch savedBatch = paymentBatchRepository.save(batch);
+        return mapper.toDto(savedBatch);
+    }
+
+    // --- Get all DRAFTs for the drafts page ---
+    @Transactional(readOnly = true)
+    public List<PaymentBatchResponse> getAllDrafts() {
+        return paymentBatchRepository.findByStatusOrderBySavedAtDesc(PaymentStatus.DRAFT)
+                .stream()
+                .map(mapper::toDto)
+                .collect(Collectors.toList());
+    }
+
+    // --- Get a single draft by ID (for editing) ---
+    @Transactional(readOnly = true)
+    public Optional<PaymentBatchResponse> getDraftById(Long id) {
+        Optional<PaymentBatch> batchOpt = paymentBatchRepository.findById(id);
+
+        // Check if it exists AND if it's actually a DRAFT
+        if (batchOpt.isEmpty() || batchOpt.get().getStatus() != PaymentStatus.DRAFT) {
+            return Optional.empty();
+        }
+        
+        return batchOpt.map(mapper::toDto);
+    }
+
+    // --- Update an existing DRAFT ---
+    @Transactional
+    public Optional<PaymentBatchResponse> updateDraft(Long id, PaymentBatchRequest request) {
+        // 1. Find the existing batch
+        Optional<PaymentBatch> existingBatchOpt = paymentBatchRepository.findById(id);
+
+        // If it doesn't exist or isn't a draft, return empty
+        if (existingBatchOpt.isEmpty() || existingBatchOpt.get().getStatus() != PaymentStatus.DRAFT) {
+            return Optional.empty();
+        }
+
+        // 2. Create a new entity from the request data
+        PaymentBatch updatedData = mapper.toEntity(request);
+        
+        // 3. Set the ID and status to match the existing entity
+        updatedData.setId(id);
+        updatedData.setStatus(PaymentStatus.DRAFT);
+        
+        // 4. Save the updated entity
+        PaymentBatch savedBatch = paymentBatchRepository.save(updatedData);
+        
+        return Optional.of(mapper.toDto(savedBatch));
+    }
+}
+
+
+
+7. Controller
+
+package com.example.paymentapp.controller;
+
+import com.example.paymentapp.dto.PaymentBatchRequest;
+import com.example.paymentapp.dto.PaymentBatchResponse;
+import com.example.paymentapp.service.PaymentBatchService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+@RestController
+@RequestMapping("/api")
+@Tag(name = "Payment API", description = "Endpoints for managing payment drafts and submissions")
+public class PaymentBatchController {
+
+    private final PaymentBatchService paymentBatchService;
+
+    @Autowired
+    public PaymentBatchController(PaymentBatchService paymentBatchService) {
+        this.paymentBatchService = paymentBatchService;
+    }
+
+    /**
+     * Saves a new payment as a DRAFT.
+     * Used by the "Save as Draft" button for a new payment.
+     */
+    @Operation(summary = "Save a new payment as a draft")
+    @PostMapping("/drafts")
+    public ResponseEntity<PaymentBatchResponse> saveDraft(@Valid @RequestBody PaymentBatchRequest request) {
+        PaymentBatchResponse response = paymentBatchService.saveDraft(request);
+        return new ResponseEntity<>(response, HttpStatus.CREATED);
+    }
+
+    /**
+     * Updates an existing DRAFT.
+     * Used by the "Save as Draft" button when editing a draft.
+     */
+    @Operation(summary = "Update an existing draft")
+    @PutMapping("/drafts/{id}")
+    public ResponseEntity<PaymentBatchResponse> updateDraft(
+            @PathVariable Long id,
+            @Valid @RequestBody PaymentBatchRequest request) {
+        
+        Optional<PaymentBatchResponse> responseOpt = paymentBatchService.updateDraft(id, request);
+        
+        // This is the non-exception way to handle "Not Found"
+        return responseOpt
+                .map(ResponseEntity::ok) // If present, return 200 OK
+                .orElseGet(() -> ResponseEntity.notFound().build()); // If empty, return 404 Not Found
+    }
+
+    /**
+     * Gets all saved DRAFTS.
+     * Used by the "Drafts" page.
+     */
+    @Operation(summary = "Get all saved drafts")
+    @GetMapping("/drafts")
+    public ResponseEntity<List<PaymentBatchResponse>> getAllDrafts() {
+        List<PaymentBatchResponse> drafts = paymentBatchService.getAllDrafts();
+        return ResponseEntity.ok(drafts);
+    }
+
+    /**
+     * Gets a single DRAFT by its ID.
+     * Used by the "View / Edit" button.
+     */
+    @Operation(summary = "Get a single draft by its ID")
+    @GetMapping("/drafts/{id}")
+    public ResponseEntity<PaymentBatchResponse> getDraftById(@PathVariable Long id) {
+        
+        Optional<PaymentBatchResponse> draftOpt = paymentBatchService.getDraftById(id);
+
+        // This is the non-exception way to handle "Not Found"
+        return draftOpt
+                .map(ResponseEntity::ok) // If present, return 200 OK
+                .orElseGet(() -> ResponseEntity.notFound().build()); // If empty, return 404 Not Found
+    }
+
+    /**
+     * Submits a new payment for processing.
+     * Used by the "Confirm Submit" button.
+     */
+    @Operation(summary = "Submit a new payment for processing")
+    @PostMapping("/payments/submit")
+    public ResponseEntity<Map<String, String>> submitPayment(@Valid @RequestBody PaymentBatchRequest request) {
+        paymentBatchService.submitPayment(request);
+        
+        // Create a simple JSON response: {"message": "Batch Submitted Successfully!"}
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "Batch Submitted Successfully!");
+        
+        return ResponseEntity.ok(response);
+    }
+}
